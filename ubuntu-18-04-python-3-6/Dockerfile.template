@@ -1,0 +1,116 @@
+FROM balenalib/jetson-nano-ubuntu:bionic as builder
+
+ENV DEBIAN_FRONTEND noninteractive
+
+WORKDIR /usr/src/app
+
+RUN \
+  apt-get update
+
+RUN \
+  apt-get install --no-install-recommends -y \  
+  python3 \
+  python3-pip \
+  python3-setuptools \
+  lbzip2 \
+  curl
+
+RUN \
+  apt-get install --no-install-recommends -y \
+  libavcodec57 \
+  libavformat57 \
+  libavutil55 \
+  libcairo2 \
+  libgdk-pixbuf2.0-0 \
+  libgstreamer-plugins-base1.0-0 \
+  libgstreamer1.0-0 libgtk2.0-0 \
+  libjpeg8 \
+  libpng16-16 \
+  libswscale4 \
+  libtbb2 \
+  libtiff5 \
+  libtbb-dev
+
+# NVIDIA JetPack SDK & drivers
+ADD nvidia /usr/src/app/nvidia
+
+RUN \
+  dpkg -i nvidia/deb/cuda-repo-l4t-10-0-local-10.0.166_1.0-1_arm64.deb && \  
+  apt-key add /var/cuda-repo-10-0-local-10.0.166/*.pub && \
+  apt-get update && \
+  apt-get install -y cuda-compiler-10-0 cuda-cublas-10-0 cuda-cudart-10-0 cuda-toolkit-10-0 && \
+  dpkg --remove cuda-repo-l4t-10-0-local-10.0.166 && \
+  dpkg -P cuda-repo-l4t-10-0-local-10.0.166 && \
+  rm nvidia/deb/cuda-repo-l4t-10-0-local-10.0.166_1.0-1_arm64.deb && \
+  dpkg -i nvidia/deb/*.deb && \
+  tar xjf nvidia/nvidia_drivers.tbz2 -C / && \
+  tar xjf nvidia/config.tbz2 -C / --exclude=etc/hosts --exclude=etc/hostname && \
+  echo "/usr/lib/aarch64-linux-gnu/tegra" > /etc/ld.so.conf.d/nvidia-tegra.conf && \
+  ldconfig && \
+  rm -rf nvidia
+
+# Jetbot
+# https://docs.nvidia.com/deeplearning/frameworks/install-tf-xavier/index.html
+# https://github.com/NVIDIA-AI-IOT/jetbot/wiki/Software-Setup
+RUN \
+  apt-get install --no-install-recommends -y zlib1g-dev zip libjpeg8-dev libhdf5-dev python3-dev git cmake pkg-config && \
+  pip3 install -U wheel && \
+  pip3 install -U traitlets ipywidgets numpy && \
+  pip3 install -U grpcio absl-py py-cpuinfo psutil portpicker grpcio six mock requests gast astor termcolor h5py && \
+  pip3 install -U --pre --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v42 tensorflow-gpu==1.13.1+nv19.5
+
+# Don't use --shallow-submodules, it fails:
+#
+#   Fetched in submodule path 'third_party/FXdiv', but it did not contain b742d1143724d646cd0f914646f1240eacf5bd73.
+#   Direct fetching of that commit failed.
+#
+# https://devtalk.nvidia.com/default/topic/1042821/jetson-tx2/pytorch-install-with-python3-broken/
+ADD patches /usr/src/app/patches
+RUN \
+  pip3 install -U pyyaml && \  
+  git clone -b v1.1.0 --single-branch --depth 1 --recursive https://github.com/pytorch/pytorch && \
+  cd pytorch && \
+  git apply ../patches/pytorch-disable-nccl.patch && \
+  pip3 install -U -r requirements.txt && \
+  USE_NCCL=0 python3 setup.py bdist_wheel
+
+RUN \
+  curl -L "https://files.pythonhosted.org/packages/43/27/a6e7dcb8ae20a4dbf3725321058923fec262b6f7835179d78ccc8d98deec/h5py-2.9.0.tar.gz" --output h5py-2.9.0.tar.gz && \
+  curl -L "https://files.pythonhosted.org/packages/fb/d5/30bc142a40bb891c28739ec48c99730d20e5fb9cf9637036b4b52f70505b/grpcio-1.21.1.tar.gz" --output grpcio-1.21.1.tar.gz && \
+  curl -L "https://files.pythonhosted.org/packages/f8/48/5416696b9f2eacc7d1f9fe3a7187ad54d769e09585ec0b59c137ab5c7575/pyzmq-18.0.1.tar.gz" --output pyzmq-18.0.1.tar.gz && \
+  curl -L "https://files.pythonhosted.org/packages/d3/4b/f9f4b96c0b1ba43d28a5bdc4b64f0b9d3fbcf31313a51bc766942866a7c7/numpy-1.16.4.zip" --output numpy-1.16.4.zip
+
+RUN \
+  tar xzf h5py-2.9.0.tar.gz && \
+  cd h5py-2.9.0 && \
+  python3 setup.py bdist_wheel
+
+RUN \
+  tar xzf grpcio-1.21.1.tar.gz && \
+  cd grpcio-1.21.1 && \
+  python3 setup.py bdist_wheel
+
+RUN \
+  tar xzf pyzmq-18.0.1.tar.gz && \
+  cd pyzmq-18.0.1 && \
+  python3 setup.py bdist_wheel
+
+RUN \
+  apt-get install -y unzip && \
+  unzip numpy-1.16.4.zip && \
+  cd numpy-1.16.4 && \
+  python3 setup.py bdist_wheel
+
+FROM balenalib/jetson-nano-ubuntu:bionic-run
+
+WORKDIR /usr/src/app
+
+COPY --from=builder /usr/src/app/pytorch/dist /usr/src/app/pytorch/dist
+COPY --from=builder /usr/src/app/h5py-2.9.0/dist /usr/src/app/h5py-2.9.0/dist
+COPY --from=builder /usr/src/app/grpcio-1.21.1/dist /usr/src/app/grpcio-1.21.1/dist
+COPY --from=builder /usr/src/app/pyzmq-18.0.1/dist /usr/src/app/pyzmq-18.0.1/dist
+COPY --from=builder /usr/src/app/numpy-1.16.4/dist /usr/src/app/numpy-1.16.4/dist
+
+ENV UDEV 1
+
+CMD [ "sleep", "infinity" ]
