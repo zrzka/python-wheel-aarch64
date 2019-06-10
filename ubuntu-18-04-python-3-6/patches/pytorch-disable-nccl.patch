@@ -1,0 +1,40 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 71f8b69..9017951 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -97,7 +97,7 @@ option(USE_LITE_PROTO "Use lite protobuf instead of full." OFF)
+ option(USE_LMDB "Use LMDB" OFF)
+ option(USE_METAL "Use Metal for iOS build" ON)
+ option(USE_NATIVE_ARCH "Use -march=native" OFF)
+-option(USE_NCCL "Use NCCL" ON)
++option(USE_NCCL "Use NCCL" OFF)
+ option(USE_SYSTEM_NCCL "Use system-wide NCCL" OFF)
+ option(USE_NNAPI "Use NNAPI" OFF)
+ option(USE_NNPACK "Use NNPACK" ON)
+diff --git a/setup.py b/setup.py
+index b1faf3a..b164e53 100644
+--- a/setup.py
++++ b/setup.py
+@@ -179,6 +179,7 @@ RUN_BUILD_DEPS = True
+ # that in our parts of the build
+ EMIT_BUILD_WARNING = False
+ RERUN_CMAKE = False
++USE_NCCL = False
+ filtered_args = []
+ for i, arg in enumerate(sys.argv):
+     if arg == '--cmake':
+diff --git a/tools/build_pytorch_libs.py b/tools/build_pytorch_libs.py
+index 432fed3..d98e591 100644
+--- a/tools/build_pytorch_libs.py
++++ b/tools/build_pytorch_libs.py
+@@ -192,8 +192,8 @@ def run_cmake(version,
+         USE_FFMPEG=check_env_flag('USE_FFMPEG'),
+         USE_SYSTEM_EIGEN_INSTALL="OFF",
+         USE_MKLDNN=USE_MKLDNN,
+-        USE_NCCL=USE_NCCL,
+-        NCCL_EXTERNAL=USE_NCCL,
++        USE_NCCL=False,
++        NCCL_EXTERNAL=False,
+         CMAKE_INSTALL_PREFIX=install_dir,
+         CMAKE_C_FLAGS=cflags,
+         CMAKE_CXX_FLAGS=cflags,
