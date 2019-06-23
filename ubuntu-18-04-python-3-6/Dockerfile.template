@@ -57,8 +57,8 @@ RUN \
   apt-get install --no-install-recommends -y zlib1g-dev zip libjpeg8-dev libhdf5-dev python3-dev git cmake pkg-config && \
   pip3 install -U wheel && \
   pip3 install -U traitlets ipywidgets numpy && \
-  pip3 install -U grpcio absl-py py-cpuinfo psutil portpicker grpcio six mock requests gast astor termcolor h5py && \
-  pip3 install -U --pre --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v42 tensorflow-gpu==1.13.1+nv19.5
+  pip3 install -U grpcio absl-py py-cpuinfo psutil portpicker grpcio six mock requests gast astor termcolor h5py tensorflow-estimator && \
+  pip3 install --pre --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v42 tensorflow-gpu==1.13.1+nv19.5
 
 # Don't use --shallow-submodules, it fails:
 #
@@ -73,7 +73,7 @@ RUN \
   cd pytorch && \
   git apply ../patches/pytorch-disable-nccl.patch && \
   pip3 install -U -r requirements.txt && \
-  USE_NCCL=0 python3 setup.py bdist_wheel
+  TORCH_CUDA_ARCH_LIST=5.3 USE_NCCL=0 python3 setup.py bdist_wheel
 
 RUN \
   curl -L "https://files.pythonhosted.org/packages/43/27/a6e7dcb8ae20a4dbf3725321058923fec262b6f7835179d78ccc8d98deec/h5py-2.9.0.tar.gz" --output h5py-2.9.0.tar.gz && \
